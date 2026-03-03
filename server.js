@@ -348,12 +348,10 @@ app.post("/api/ronda/enfrentar", async (req, res) => {
   } catch (error) {
     await connection.rollback();
     console.error("❌ Error creando enfrentamientos:", error);
-    res
-      .status(500)
-      .json({
-        error: "Error al crear enfrentamientos",
-        detalle: error.message,
-      });
+    res.status(500).json({
+      error: "Error al crear enfrentamientos",
+      detalle: error.message,
+    });
   } finally {
     connection.release();
   }
@@ -462,6 +460,98 @@ app.get("/api/rondas", async (req, res) => {
   }
 });
 
+// ============================================
+// RUTA TEMPORAL PARA CREAR TABLAS (AGREGAR AQUÍ)
+// ============================================
+app.get("/api/crear-tablas", async (req, res) => {
+  const connection = await db.getConnection();
+  let resultado = [];
+
+  try {
+    console.log("📦 Creando tablas en Railway...");
+
+    // Tabla jugadores
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS jugadores (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(255) UNIQUE NOT NULL,
+        saldo_total DECIMAL(10,2) DEFAULT 0,
+        activo TINYINT DEFAULT 1
+      );
+    `);
+    resultado.push("✅ Tabla jugadores creada");
+
+    // Tabla rondas
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS rondas (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        estado VARCHAR(50) DEFAULT 'activa',
+        total_apuestas DECIMAL(10,2) DEFAULT 0
+      );
+    `);
+    resultado.push("✅ Tabla rondas creada");
+
+    // Tabla equipos_ronda
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS equipos_ronda (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ronda_id INT,
+        nombre_equipo VARCHAR(10),
+        FOREIGN KEY (ronda_id) REFERENCES rondas(id) ON DELETE CASCADE
+      );
+    `);
+    resultado.push("✅ Tabla equipos_ronda creada");
+
+    // Tabla apuestas_ronda
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS apuestas_ronda (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ronda_id INT,
+        equipo_id INT,
+        jugador_id INT,
+        monto_apuesta DECIMAL(10,2) DEFAULT 0,
+        FOREIGN KEY (ronda_id) REFERENCES rondas(id) ON DELETE CASCADE,
+        FOREIGN KEY (equipo_id) REFERENCES equipos_ronda(id) ON DELETE CASCADE,
+        FOREIGN KEY (jugador_id) REFERENCES jugadores(id) ON DELETE CASCADE
+      );
+    `);
+    resultado.push("✅ Tabla apuestas_ronda creada");
+
+    // Tabla enfrentamientos
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS enfrentamientos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ronda_id INT,
+        jugador_equipoA_id INT,
+        jugador_equipoB_id INT,
+        monto_enfrentamiento DECIMAL(10,2),
+        ganador_id INT,
+        FOREIGN KEY (ronda_id) REFERENCES rondas(id) ON DELETE CASCADE,
+        FOREIGN KEY (jugador_equipoA_id) REFERENCES apuestas_ronda(id),
+        FOREIGN KEY (jugador_equipoB_id) REFERENCES apuestas_ronda(id),
+        FOREIGN KEY (ganador_id) REFERENCES apuestas_ronda(id)
+      );
+    `);
+    resultado.push("✅ Tabla enfrentamientos creada");
+
+    res.json({
+      success: true,
+      message: "Tablas creadas correctamente",
+      resultado,
+    });
+  } catch (error) {
+    console.error("❌ Error creando tablas:", error);
+    res.status(500).json({
+      error: error.message,
+      sql: error.sql,
+      code: error.code,
+    });
+  } finally {
+    connection.release();
+  }
+});
+
 // Ruta de diagnóstico
 app.get("/api/diagnostico", async (req, res) => {
   try {
@@ -469,7 +559,7 @@ app.get("/api/diagnostico", async (req, res) => {
     res.json({
       status: "✅ Conexión OK",
       timestamp: result[0].tiempo,
-      db: "MySQL Hostinger",
+      db: "MySQL Railway",
     });
   } catch (error) {
     console.error("❌ Error en diagnóstico:", error);
@@ -490,5 +580,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Servidor corriendo en puerto ${PORT}`);
   console.log(`📁 Archivos estáticos: ${path.join(__dirname, "public")}`);
-  console.log(`📁 Base de datos: MySQL Hostinger`);
+  console.log(`📁 Base de datos: MySQL Railway`);
 });
